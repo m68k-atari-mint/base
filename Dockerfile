@@ -2,6 +2,7 @@
 
 ARG TARGET=m68k-atari-mintelf
 ARG INSTALL_DIR=/usr/${TARGET}
+ARG JOBS=8
 
 # always latest LTS
 FROM ubuntu:latest AS build
@@ -14,6 +15,7 @@ COPY gcc-atari.patch .
 # renew the arguments
 ARG TARGET
 ARG INSTALL_DIR
+ARG JOBS
 
 # used at a few places
 ENV VERSION_BINUTILS	2.41
@@ -34,8 +36,7 @@ ENV FOLDER_GCC		    ${REPOSITORY_GCC}-${BRANCH_GCC}
 RUN wget -q -O - ${GITHUB_URL_GCC} | tar xzf -
 RUN cd ${FOLDER_GCC} \
     && ./contrib/download_prerequisites \
-    && patch -p1 < ../gcc-atari.patch \
-    && cd -
+    && patch -p1 < ../gcc-atari.patch
 
 # binutils preliminary build (actually a full one but for preliminary gcc)
 RUN mkdir build-binutils-preliminary \
@@ -47,9 +48,8 @@ RUN mkdir build-binutils-preliminary \
         --disable-werror \
         --enable-gprofng=no \
         --disable-gdb --disable-libdecnumber --disable-readline --disable-sim \
-    && make \
-    && make install-strip \
-    && cd -
+    && make -j${JOBS} \
+    && make install-strip
 
 # gcc preliminary build
 RUN mkdir build-gcc-preliminary \
@@ -72,9 +72,8 @@ RUN mkdir build-gcc-preliminary \
         --enable-languages=c \
         --disable-multilib \
         --disable-lto \
-    && make all-gcc all-target-libgcc \
-    && make install-gcc install-target-libgcc \
-    && cd -
+    && make -j${JOBS} all-gcc all-target-libgcc \
+    && make install-gcc install-target-libgcc
 
 # mintlib download
 ENV REPOSITORY_MINTLIB	mintlib
@@ -100,15 +99,13 @@ RUN wget -q -O - ${GITHUB_URL_MINTBIN} | tar xzf -
 # mintlib build
 RUN cd ${FOLDER_MINTLIB} \
     && PATH=${INSTALL_DIR}-tmp/bin:$PATH make toolprefix=${TARGET}- CROSS=yes WITH_DEBUG_LIB=no \
-    && make WITH_DEBUG_LIB=no prefix="${INSTALL_DIR}/${TARGET}/sys-root/usr" install \
-    && cd -
+    && make WITH_DEBUG_LIB=no prefix="${INSTALL_DIR}/${TARGET}/sys-root/usr" install
 
 # fdlibm build
 RUN cd ${FOLDER_FDLIBM} \
     && PATH=${INSTALL_DIR}-tmp/bin:$PATH ./configure --host=${TARGET} --prefix="${INSTALL_DIR}/${TARGET}/sys-root/usr" \
     && PATH=${INSTALL_DIR}-tmp/bin:$PATH make \
-    && make install \
-    && cd -
+    && make install
 
 # remove preliminary binutils/gcc
 RUN rm -rf ${INSTALL_DIR}-tmp
@@ -123,9 +120,8 @@ RUN mkdir build-binutils \
         --disable-werror \
         --enable-gprofng=no \
         --disable-gdb --disable-libdecnumber --disable-readline --disable-sim \
-    && make \
-    && make install-strip \
-    && cd -
+    && make -j${JOBS} \
+    && make install-strip
 
 # gcc build
 RUN mkdir build-gcc \
@@ -143,9 +139,9 @@ RUN mkdir build-gcc \
         --disable-libstdcxx-pch \
         --with-libstdcxx-zoneinfo=no \
         --disable-sjlj-exceptions \
-    && make \
-    && make install-strip \
-    && cd -
+        --disable-libcc1 \
+    && make -j${JOBS} \
+    && make install-strip
 
 RUN cd "${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixed" && \
     for f in $(find . -type f); \
@@ -164,8 +160,7 @@ RUN cd "${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixed" && \
 RUN cd ${FOLDER_MINTBIN} \
     && PATH=${INSTALL_DIR}/bin:$PATH ./configure --target=${TARGET} --prefix=${INSTALL_DIR} --disable-nls \
     && make \
-    && make install \
-    && cd -
+    && make install
 
 # final build
 FROM ubuntu:latest
@@ -174,6 +169,7 @@ RUN apt -y update && apt -y upgrade
 # renew the arguments
 ARG TARGET
 ARG INSTALL_DIR
+ARG JOBS
 
 COPY --from=build ${INSTALL_DIR} ${INSTALL_DIR}
 
