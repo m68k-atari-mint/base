@@ -184,11 +184,9 @@ COPY build.sh .
 
 # renew the arguments
 ARG TARGET
-ARG INSTALL_DIR
 ARG BUILD_DIR
-ARG JOBS
 
-COPY --from=build ${BUILD_DIR}/* ${INSTALL_DIR}
+COPY --from=build ${BUILD_DIR} /
 
 ENV TOOL_PREFIX ${TARGET}
-ENV BUILD_SCRIPT ${WORKDIR}/build.sh
+ENV BUILD_SCRIPT /src/build.sh
