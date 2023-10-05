@@ -3,13 +3,14 @@
 ARG TARGET=m68k-atari-mintelf
 ARG INSTALL_DIR=/usr
 ARG BUILD_DIR=/build
-ARG JOBS=2
+ARG JOBS=8
 
 # always latest LTS
 FROM ubuntu:latest AS build
 RUN apt -y update && apt -y upgrade
 RUN apt -y install binutils bison bzip2 file flex gawk gcc g++ m4 make patch texinfo wget
 RUN ln -s bash /bin/sh.bash && mv /bin/sh.bash /bin/sh
+
 WORKDIR /src
 COPY gcc-atari.patch .
 
@@ -178,6 +179,9 @@ RUN cd "${BUILD_DIR}${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixe
 FROM ubuntu:latest
 RUN apt -y update && apt -y upgrade
 
+WORKDIR /src
+COPY build.sh .
+
 # renew the arguments
 ARG TARGET
 ARG INSTALL_DIR
@@ -187,3 +191,4 @@ ARG JOBS
 COPY --from=build ${BUILD_DIR}/* ${INSTALL_DIR}
 
 ENV TOOL_PREFIX ${TARGET}
+ENV BUILD_SCRIPT ${WORKDIR}/build.sh
