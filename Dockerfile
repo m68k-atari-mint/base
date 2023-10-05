@@ -3,7 +3,7 @@
 ARG TARGET=m68k-atari-mintelf
 ARG INSTALL_DIR=/usr
 ARG BUILD_DIR=/build
-ARG JOBS=8
+ARG JOBS=2
 
 # always latest LTS
 FROM ubuntu:latest AS build
