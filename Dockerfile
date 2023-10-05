@@ -1,7 +1,8 @@
 # docker buildx build --progress plain .
 
 ARG TARGET=m68k-atari-mintelf
-ARG INSTALL_DIR=/usr/${TARGET}
+ARG INSTALL_DIR=/usr
+ARG BUILD_DIR=/build
 ARG JOBS=8
 
 # always latest LTS
@@ -15,6 +16,7 @@ COPY gcc-atari.patch .
 # renew the arguments
 ARG TARGET
 ARG INSTALL_DIR
+ARG BUILD_DIR
 ARG JOBS
 
 # used at a few places
@@ -38,26 +40,31 @@ RUN cd ${FOLDER_GCC} \
     && ./contrib/download_prerequisites \
     && patch -p1 < ../gcc-atari.patch
 
-# binutils preliminary build (actually a full one but for preliminary gcc)
-RUN mkdir build-binutils-preliminary \
-    && cd build-binutils-preliminary \
+# binutils build
+RUN mkdir build-binutils \
+    && cd build-binutils \
     && ../${FOLDER_BINUTILS}/configure \
         --target=${TARGET} \
-        --prefix=${INSTALL_DIR}-tmp \
+        --prefix=${INSTALL_DIR} \
         --disable-nls \
         --disable-werror \
         --enable-gprofng=no \
         --disable-gdb --disable-libdecnumber --disable-readline --disable-sim \
-    && make -j${JOBS} \
-    && make install-strip
+    && make -j${JOBS}
+
+# binutils install into ${BUILD_DIR}-tmp for gcc preliminary build as they need to be together
+RUN cd build-binutils \
+    && make install-strip DESTDIR=${BUILD_DIR}-tmp
 
 # gcc preliminary build
 RUN mkdir build-gcc-preliminary \
     && cd build-gcc-preliminary \
-    && PATH=${INSTALL_DIR}-tmp/bin:$PATH ../${FOLDER_GCC}/configure \
-        --prefix=${INSTALL_DIR}-tmp \
+    && ../${FOLDER_GCC}/configure \
+        # prefix must be pointing to where binutils are installed (also, PATH is not required to be set then...)
+        --prefix=${BUILD_DIR}-tmp${INSTALL_DIR} \
         --target=${TARGET} \
-        --with-sysroot=${INSTALL_DIR}/${TARGET}/sys-root \
+        # sys-root must be set where the libraries will go otherwise projects requiring mintlib (e.g. fdlibm) will fail
+        --with-sysroot=${BUILD_DIR}${INSTALL_DIR}/${TARGET}/sys-root \
         --disable-nls \
         --disable-shared \
         --without-headers \
@@ -96,40 +103,33 @@ ENV GITHUB_URL_MINTBIN	https://github.com/freemint/${REPOSITORY_MINTBIN}/archive
 ENV FOLDER_MINTBIN		${REPOSITORY_MINTBIN}-${BRANCH_MINTBIN}
 RUN wget -q -O - ${GITHUB_URL_MINTBIN} | tar xzf -
 
-# mintlib build
+# this is where preliminary binutils+gcc are installed
+ENV TMP_PATH "${BUILD_DIR}-tmp${INSTALL_DIR}/bin"
+
+# mintlib build & install into ${BUILD_DIR}
 RUN cd ${FOLDER_MINTLIB} \
-    && PATH=${INSTALL_DIR}-tmp/bin:$PATH make toolprefix=${TARGET}- CROSS=yes WITH_DEBUG_LIB=no \
-    && make WITH_DEBUG_LIB=no prefix="${INSTALL_DIR}/${TARGET}/sys-root/usr" install
+    && PATH="${TMP_PATH}:$PATH" make toolprefix=${TARGET}- CROSS=yes WITH_DEBUG_LIB=no \
+    && make WITH_DEBUG_LIB=no prefix="${BUILD_DIR}${INSTALL_DIR}/${TARGET}/sys-root/usr" install
 
-# fdlibm build
+# fdlibm build & install into ${BUILD_DIR}
 RUN cd ${FOLDER_FDLIBM} \
-    && PATH=${INSTALL_DIR}-tmp/bin:$PATH ./configure --host=${TARGET} --prefix="${INSTALL_DIR}/${TARGET}/sys-root/usr" \
-    && PATH=${INSTALL_DIR}-tmp/bin:$PATH make \
-    && make install
+    && PATH="${TMP_PATH}:$PATH" ./configure --host=${TARGET} --prefix="${INSTALL_DIR}/${TARGET}/sys-root/usr" \
+    && PATH="${TMP_PATH}:$PATH" make \
+    && make install DESTDIR=${BUILD_DIR}
 
-# remove preliminary binutils/gcc
-RUN rm -rf ${INSTALL_DIR}-tmp
-
-# binutils build
-RUN mkdir build-binutils \
-    && cd build-binutils \
-    && ../${FOLDER_BINUTILS}/configure \
-        --target=${TARGET} \
-        --prefix=${INSTALL_DIR} \
-        --disable-nls \
-        --disable-werror \
-        --enable-gprofng=no \
-        --disable-gdb --disable-libdecnumber --disable-readline --disable-sim \
-    && make -j${JOBS} \
+# binutils install into ${INSTALL_DIR} for gcc build as they need to be together
+RUN cd build-binutils \
     && make install-strip
 
 # gcc build
 RUN mkdir build-gcc \
     && cd build-gcc \
-    && PATH=${INSTALL_DIR}/bin:$PATH ../${FOLDER_GCC}/configure \
+    && ../${FOLDER_GCC}/configure \
+        # we want to keep ${INSTALL_DIR} as prefix therefore binutils must be installed to the same location
         --prefix=${INSTALL_DIR} \
         --target=${TARGET} \
         --with-sysroot=${INSTALL_DIR}/${TARGET}/sys-root \
+        --with-build-sysroot=${BUILD_DIR}${INSTALL_DIR}/${TARGET}/sys-root \
         --disable-nls \
         --disable-shared \
         --without-newlib \
@@ -143,7 +143,25 @@ RUN mkdir build-gcc \
     && make -j${JOBS} \
     && make install-strip
 
-RUN cd "${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixed" && \
+###############################################################
+# at this point, we have a full gcc in ${INSTALL_DIR} available
+###############################################################
+
+# mintbin build & install into ${BUILD_DIR}
+RUN cd ${FOLDER_MINTBIN} \
+    && ./configure --target=${TARGET} --prefix=${INSTALL_DIR} --disable-nls \
+    && make \
+    && make install DESTDIR=${BUILD_DIR}
+
+# binutils install into ${BUILD_DIR}
+RUN cd build-binutils \
+   && make install-strip DESTDIR=${BUILD_DIR}
+
+# gcc install into ${BUILD_DIR}
+RUN cd build-gcc \
+    && make install-strip DESTDIR=${BUILD_DIR}
+
+RUN cd "${BUILD_DIR}${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixed" && \
     for f in $(find . -type f); \
     do \
         case "$f" in \
@@ -156,12 +174,6 @@ RUN cd "${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixed" && \
         test "$d" = "." || rmdir "$d"; \
     done
 
-# mintbin build
-RUN cd ${FOLDER_MINTBIN} \
-    && PATH=${INSTALL_DIR}/bin:$PATH ./configure --target=${TARGET} --prefix=${INSTALL_DIR} --disable-nls \
-    && make \
-    && make install
-
 # final build
 FROM ubuntu:latest
 RUN apt -y update && apt -y upgrade
@@ -169,9 +181,9 @@ RUN apt -y update && apt -y upgrade
 # renew the arguments
 ARG TARGET
 ARG INSTALL_DIR
+ARG BUILD_DIR
 ARG JOBS
 
-COPY --from=build ${INSTALL_DIR} ${INSTALL_DIR}
+COPY --from=build ${BUILD_DIR}/* ${INSTALL_DIR}
 
-ENV PATH ${INSTALL_DIR}/bin:${PATH}
 ENV TOOL_PREFIX ${TARGET}
