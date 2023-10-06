@@ -184,9 +184,11 @@ COPY build.sh .
 
 # renew the arguments
 ARG TARGET
+ARG INSTALL_DIR
 ARG BUILD_DIR
 
 COPY --from=build ${BUILD_DIR} /
 
 ENV TOOL_PREFIX ${TARGET}
 ENV BUILD_SCRIPT /src/build.sh
+ENV SYSROOT_DIR=${INSTALL_DIR}/${TARGET}/sys-root
