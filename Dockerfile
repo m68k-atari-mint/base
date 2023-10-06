@@ -178,6 +178,7 @@ RUN cd "${BUILD_DIR}${INSTALL_DIR}/lib/gcc/${TARGET}/${VERSION_GCC}/include-fixe
 # final build
 FROM ubuntu:latest
 RUN apt -y update && apt -y upgrade
+RUN apt -y install make pkg-config wget
 
 WORKDIR /src
 COPY build.sh .
