@@ -192,3 +192,5 @@ COPY --from=build ${BUILD_DIR} /
 ENV TOOL_PREFIX ${TARGET}
 ENV BUILD_SCRIPT /src/build.sh
 ENV SYSROOT_DIR=${INSTALL_DIR}/${TARGET}/sys-root
+ENV PKG_CONFIG_SYSROOT_DIR ${SYSROOT_DIR}
+# PKG_CONFIG_LIBDIR="${SYSROOT_DIR}/usr/lib/<cpu>/pkgconfig" must be set manually when needed
