@@ -15,12 +15,12 @@ make
 make install DESTDIR="$1"
 make distclean || make clean
 
-CFLAGS="$CFLAGS -m68020-60" CXXFLAGS="$CXXFLAGS -m68020-60" ./configure $CONFIGURE_FLAGS --bindir=$PREFIX/bin/m68020-60 --sbindir=$PREFIX/sbin/m68020-60 --libdir=$PREFIX/lib/m68020-60
+ASFLAGS="$ASFLAGS -m68020-60" CFLAGS="$CFLAGS -m68020-60" CXXFLAGS="$CXXFLAGS -m68020-60" LDFLAGS="-m68020-60" PKG_CONFIG_LIBDIR="$PREFIX/lib/m68020-60/pkgconfig" ./configure $CONFIGURE_FLAGS --bindir=$PREFIX/bin/m68020-60 --sbindir=$PREFIX/sbin/m68020-60 --libdir=$PREFIX/lib/m68020-60
 make
 make install DESTDIR="$1"
 make distclean || make clean
 
-CFLAGS="$CFLAGS -mcpu=5475" CXXFLAGS="$CXXFLAGS -mcpu=5475" ./configure $CONFIGURE_FLAGS --bindir=$PREFIX/bin/m5475 --sbindir=$PREFIX/sbin/m5475 --libdir=$PREFIX/lib/m5475
+ASFLAGS="$ASFLAGS -mcpu=5475" CFLAGS="$CFLAGS -mcpu=5475" CXXFLAGS="$CXXFLAGS -mcpu=5475" LDFLAGS="-mcpu=5475" PKG_CONFIG_LIBDIR="$PREFIX/lib/m5475/pkgconfig" ./configure $CONFIGURE_FLAGS --bindir=$PREFIX/bin/m5475 --sbindir=$PREFIX/sbin/m5475 --libdir=$PREFIX/lib/m5475
 make
 make install DESTDIR="$1"
 make distclean || make clean
